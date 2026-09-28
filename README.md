@@ -216,11 +216,15 @@ Na pasta /docs/ do repositório encontram-se as evidências de validação do CP
 * v1-list.json / screenshot: Resposta da v1 com array simples sem paginação.
 * v2-paged.json / screenshot: Resposta da v2 paginada com envelope completo.
 * version-headers.png: Evidência dos cabeçalhos api-supported-versions e api-deprecated-versions.
-* swagger-versions.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
+* swagger-versions Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
+  * swagger-versions1.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
+  * swagger-versions2.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
+  * swagger-versions3.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
 * page-invalid-400.png: Resposta 400 Bad Request ao testar page=0 ou pageSize=9999.
 * rate-limit-429.png: Resposta 429 Too Many Requests com o cabeçalho Retry-After.
 * health-200-after-429.png: Acesso com sucesso (200 OK) ao /health após o bloqueio de escrita do Rate Limit.
 * dotnet-test.png: Saída dos testes automatizados com sucesso.
+* page-invalid-400.png: Validação da Paginação (400 Bad Request)
 
 ---
 
