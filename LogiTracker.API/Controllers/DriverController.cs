@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using LogiTracker.Application.DTOs;
 using LogiTracker.Application.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace LogiTracker.API.Controllers;
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
+[ApiVersionNeutral]
 public class DriverController : ControllerBase
 {
     private readonly IDriverRepository _driverRepository;

@@ -26,4 +26,10 @@ public interface IDeliveryRepository
     /// Remove uma entrega pelo identificador único.
     /// </summary>
     bool Delete(Guid id);
+    
+    /// <summary>
+    /// Retorna uma página de entregas (cortada no banco) e o total de registros.
+    /// </summary>
+    (IReadOnlyList<DeliveryResponse> Items, int TotalItems) GetPaged(int page, int pageSize);
+    
 }

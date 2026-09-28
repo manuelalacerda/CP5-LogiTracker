@@ -9,8 +9,8 @@ using LogiTracker.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
-
-
+using Asp.Versioning;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,18 +22,44 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
-        Title = "LogiTracker API",
+        Title = "LogiTracker API - v1",
         Version = "v1",
-        Description = "API de gerenciamento logístico do CP3"
+        Description = "API de gerenciamento logístico (v1 - legada)"
     });
 
-    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    options.SwaggerDoc("v2", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "LogiTracker API - v2",
+        Version = "v2",
+        Description = "API de gerenciamento logístico (v2 - atual)"
+    });
 
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.DocInclusionPredicate((docName, apiDesc) =>
+    {
+        var metadata = apiDesc.ActionDescriptor.EndpointMetadata;
 
-    options.IncludeXmlComments(xmlPath);
+        if (metadata.Any(m => m is ApiVersionNeutralAttribute))
+            return true;
+
+        var mapToVersions = metadata
+            .Where(m => m is MapToApiVersionAttribute)
+            .SelectMany(m => ((MapToApiVersionAttribute)m).Versions)
+            .Select(v => $"v{v.MajorVersion}")
+            .ToList();
+
+        if (mapToVersions.Count > 0)
+            return mapToVersions.Contains(docName);
+
+        var controllerVersions = metadata
+            .Where(m => m is ApiVersionAttribute)
+            .SelectMany(m => ((ApiVersionAttribute)m).Versions)
+            .Select(v => $"v{v.MajorVersion}")
+            .ToList();
+
+        return controllerVersions.Contains(docName);
+    });
 });
 
 // Banco
@@ -69,6 +95,17 @@ builder.Services.AddProblemDetails();
 // Health checks (CP4): self + banco (Oracle, via DbContext do CP2)
 builder.Services.AddLogiTrackerHealthChecks();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("escrita", opt =>
+    {
+        opt.PermitLimit = 10;                  // Máximo de 10 requisições
+        opt.Window = TimeSpan.FromMinutes(1);  // Janela de 1 minuto
+        opt.QueueLimit = 0;
+    });
+});
+
 var app = builder.Build();
 
 // Tratamento global
@@ -79,12 +116,19 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
 
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "LogiTracker.API v1");
+        options.SwaggerEndpoint("/swagger/v2/swagger.json", "LogiTracker.API v2");
+    });
 }
 
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+app.UseRateLimiter(); 
+app.MapControllers();
 
 app.MapControllers();
 

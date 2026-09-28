@@ -28,4 +28,17 @@ public sealed class DeliveryService(
         // Só chega aqui (e só persiste) se todas as dependências existirem.
         return deliveryRepository.Create(request);
     }
+    
+    /// <inheritdoc />
+    public IReadOnlyList<DeliveryResponse> GetAll() => deliveryRepository.GetAll();
+
+    /// <inheritdoc />
+    public PagedResponse<DeliveryResponse> GetPaged(int page, int pageSize)
+    {
+        PaginationRules.Validate(page, pageSize);
+
+        var (items, total) = deliveryRepository.GetPaged(page, pageSize);
+
+        return PagedResponse<DeliveryResponse>.Create(page, pageSize, total, items);
+    }
 }

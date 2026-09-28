@@ -1,6 +1,7 @@
 using LogiTracker.Application.DTOs;
 using LogiTracker.Application.Services;
 using LogiTracker.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace LogiTracker.Infrastructure;
 
@@ -16,6 +17,29 @@ public sealed class DeliveryRepository(ApplicationDbContext context) : IDelivery
             .OrderBy(d => d.OrderDate)
             .Select(DeliveryResponse.FromDomain)
             .ToList();
+    }
+
+    /// <inheritdoc />
+    public (IReadOnlyList<DeliveryResponse> Items, int TotalItems) GetPaged(int page, int pageSize)
+    {
+        var query = context.Deliveries
+            .AsNoTracking()
+            .OrderBy(d => d.CreatedAt)
+            .ThenBy(d => d.Id);
+
+        var total = query.Count();
+
+        var skip = (long)(page - 1) * pageSize;
+        if (skip >= total)
+            return (Array.Empty<DeliveryResponse>(), total);
+
+        var items = query
+            .Skip((int)skip)
+            .Take(pageSize)
+            .Select(d => new DeliveryResponse(d.Id, d.Status, d.OrderDate, d.VehicleId, d.DriverId, d.CargoId))
+            .ToList();
+
+        return (items, total);
     }
 
     /// <inheritdoc />
