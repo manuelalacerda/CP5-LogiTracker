@@ -1,6 +1,6 @@
 # 🚚 LogiTracker - CP5
  
-Projeto desenvolvido para o **Checkpoint 5 (CP5)** da FIAP, evoluindo a API REST desenvolvida nos checkpoints anteriores.
+Projeto desenvolvido para o Checkpoint 5 (CP5) da FIAP, evoluindo a API REST desenvolvida nos checkpoints anteriores com a inclusão de Versionamento de API, Paginação de Dados e Rate Limit.
 
 ## 👥 Integrantes
 
@@ -9,7 +9,7 @@ Projeto desenvolvido para o **Checkpoint 5 (CP5)** da FIAP, evoluindo a API REST
 
 ## 🏗️ Domínio e Banco de Dados
 
-**Domínio:** Logística e Transportes
+**Domínio:** Logística e Transportes (Delivery, Cargo, Driver, Vehicle, Carrier)
 
 **SGBD:** Oracle (via Entity Framework Core + Repository Pattern e migrations para persistência dos dados)
 
@@ -19,9 +19,9 @@ Projeto desenvolvido para o **Checkpoint 5 (CP5)** da FIAP, evoluindo a API REST
 
 ### ⚠️ Pré-requisitos
 
-* .NET SDK compatível com o projeto
+* .NET 8 SDK ou superior
 * Oracle Database ou ambiente Oracle acessível
-* Entity Framework Core CLI
+* Entity Framework Core CLI (dotnet-ef)
 
 ### 1. Restaurar dependências
 ```bash
@@ -60,6 +60,50 @@ Health check:
 ```text
 http://localhost:5138/health
 ```
+
+---
+
+## 🔀 Versionamento da API (CP5 - Seção A)
+
+A API suporta duas versões ativas do recurso Delivery sem interromper os consumidores legados:   
+
+* v1.0 (Deprecada): Mantém o contrato antigo do CP3, devolvendo uma lista completa (IReadOnlyList) sem paginação.
+* *v2.0 (Atual - Padrão): Introduz a paginação com envelope estruturado e filtros no banco de dados.   
+---
+
+## 📑 Paginação na v2.0 (CP5 - Seção B)
+
+A listagem v2 (GET /api/Delivery/paged) executa o corte diretamente no banco de dados Oracle via Skip() e Take() com ordenação fixa (OrderBy).   
+
+|  Parâmetro  | Padrão | Regra / Limites |
+|---|---|---|
+| `page` | 1 | Inteiro >= 1 |
+| `pageSize` | 20 | Inteiro de 1 a 100 |
+
+Formato do Envelope de Resposta (200 OK):
+```JSON
+{
+  "page": 1,
+  "pageSize": 20,
+  "totalItems": 137,
+  "totalPages": 7,
+  "items": []
+}
+```
+---
+
+## 🛑 Rate Limit (CP5 - Seção C)
+
+Para proteger a escrita na API, foi configurada uma política nativa de Fixed Window (Microsoft.AspNetCore.RateLimiting)
+
+* Endpoint Limitado: POST /api/Delivery
+* Limite: 10 requisições por minuto por endereço IP.
+* Comportamento em Estouro (HTTP 429):
+  * Retorna o cabeçalho Retry-After indicando o tempo de espera em segundos.
+  * Retorna o corpo formatado em JSON.
+* Isolamento do Health Check: O endpoint GET /health está isento da limitação (DisableRateLimiting), mantendo-se sempre operacional em 200 OK.   
+
+
 
 ---
 
@@ -109,17 +153,14 @@ O endpoint retorna o relatório completo dos checks:
 
 # 📊 Logs e Observabilidade
 
-A aplicação utiliza `ILogger<T>` para geração de logs estruturados com propriedades nomeadas e utilizam `HttpContext.TraceIdentifier` (o identificador é apresentado como `traceId`):
-
-Em um fluxo de escrita da aplicação são registrados:
-
-* `DeliveryController.Create` (`POST /api/Delivery`) - loga início e sucesso da operação.
-* `GlobalExceptionHandler` registra exceções não tratadas em nível `Error`, contendo a exceção, a mensagem e o `traceId`.
-* Em ambiente de produção, a resposta HTTP não expõe stack trace.
+* Utilização do ILogger com registos estruturados.
+* Inclusão do identificador único da requisição (HttpContext.TraceIdentifier registrado como traceId).
+* Registo de início e finalização em operações cruciais de escrita (POST /api/Delivery).
+* Captura centralizada de exceções via GlobalExceptionHandler sem expor stack traces em produção.
 
 ---
 
-# 🧪 Testes
+# 🧪 Testes Unitários
 Para executar:
 
 ```bash
@@ -129,8 +170,8 @@ dotnet test
 A solução possui dois projetos de testes:
 
 ```text
-LogiTracker.Domain.Tests
-LogiTracker.Application.Tests
+LogiTracker.Domain.Tests: Testes de regras de negócio puras (sem mocks)
+LogiTracker.Application.Tests: Testes das regras de serviço e paginação com Moq para isolar os repositórios.
 ```
 
 ## 1. Domain.Tests
@@ -168,3 +209,20 @@ As exceções são convertidas para respostas HTTP utilizando `ProblemDetails`.
 | Outras exceções             | 500 Internal Server Error |
 
 ---
+
+# 📁 Evidências do Checkpoint 5 (/docs/)
+
+Na pasta /docs/ do repositório encontram-se as evidências de validação do CP5:   
+* v1-list.json / screenshot: Resposta da v1 com array simples sem paginação.
+* v2-paged.json / screenshot: Resposta da v2 paginada com envelope completo.
+* version-headers.png: Evidência dos cabeçalhos api-supported-versions e api-deprecated-versions.
+* swagger-versions.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
+* page-invalid-400.png: Resposta 400 Bad Request ao testar page=0 ou pageSize=9999.
+* rate-limit-429.png: Resposta 429 Too Many Requests com o cabeçalho Retry-After.
+* health-200-after-429.png: Acesso com sucesso (200 OK) ao /health após o bloqueio de escrita do Rate Limit.
+* dotnet-test.png: Saída dos testes automatizados com sucesso.
+
+---
+
+
+
