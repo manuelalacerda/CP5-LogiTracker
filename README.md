@@ -1,6 +1,6 @@
-# 🚚 LogiTracker - CP4
+# 🚚 LogiTracker - CP5
  
-Projeto desenvolvido para o **Checkpoint 4 (CP4)** da FIAP, evoluindo a API REST desenvolvida nos checkpoints anteriores.
+Projeto desenvolvido para o **Checkpoint 5 (CP5)** da FIAP, evoluindo a API REST desenvolvida nos checkpoints anteriores.
 
 ## 👥 Integrantes
 
