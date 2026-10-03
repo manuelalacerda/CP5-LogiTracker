@@ -20,7 +20,7 @@
         </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.0" />
         <PackageReference Include="Microsoft.OpenApi" Version="1.6.17" />
-        <PackageReference Include="Oracle.EntityFrameworkCore" Version="9.21.150" />
+        <PackageReference Include="Oracle.EntityFrameworkCore" Version="9.23.60" />
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.0" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     </ItemGroup>

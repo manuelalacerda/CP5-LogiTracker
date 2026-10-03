@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace LogiTracker.API.Controllers;
 
-/// 
+/// <summary>
 /// Controller responsável pelas operações de entregas na API.
-///
+/// </summary>
 [ApiController]
 [ApiVersion("1.0", Deprecated = true)]
 [ApiVersion("2.0")]
@@ -17,7 +17,7 @@ public class DeliveryController : ControllerBase
 {
     private readonly IDeliveryRepository _deliveryRepository;
     private readonly IDeliveryService _deliveryService;
-    private readonly ILogger _logger;
+    private readonly ILogger<DeliveryController> _logger;
 
     public DeliveryController(
         IDeliveryRepository deliveryRepository,
@@ -28,11 +28,11 @@ public class DeliveryController : ControllerBase
         _deliveryService = deliveryService;
         _logger = logger;
     }
-    
-    /// 
+
+    /// <summary>
     /// [DEPRECADA] Lista todas as entregas (array, sem paginação). Use a v2.0.
-    /// 
-    /// Retorna todas as entregas cadastradas.
+    /// </summary>
+    /// <response code="200">Retorna todas as entregas cadastradas.</response>
     [HttpGet]
     [MapToApiVersion("1.0")]
     [ProducesResponseType(typeof(IReadOnlyList<DeliveryResponse>), StatusCodes.Status200OK)]
@@ -40,15 +40,15 @@ public class DeliveryController : ControllerBase
     {
         return Ok(_deliveryService.GetAll());
     }
-    
-    /// 
+
+    /// <summary>
     /// Lista as entregas de forma paginada (v2.0).
-    /// 
-    /// Número da página, inteiro maior ou igual a 1 (padrão 1).
-    /// Itens por página, de 1 a 100 (padrão 20).
-    /// Retorna o envelope paginado. Página além do total devolve items vazio.
-    /// page ou pageSize fora da faixa permitida.
-    [HttpGet("paged")]
+    /// </summary>
+    /// <param name="page">Número da página, inteiro maior ou igual a 1 (padrão 1).</param>
+    /// <param name="pageSize">Itens por página, de 1 a 100 (padrão 20).</param>
+    /// <response code="200">Retorna o envelope paginado. Página além do total devolve items vazio.</response>
+    /// <response code="400">page ou pageSize fora da faixa permitida.</response>
+    [HttpGet]                                   // <-- faltava
     [MapToApiVersion("2.0")]
     [ProducesResponseType(typeof(PagedResponse<DeliveryResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -58,13 +58,13 @@ public class DeliveryController : ControllerBase
     {
         return Ok(_deliveryService.GetPaged(page, pageSize));
     }
-    
-    /// 
+
+    /// <summary>
     /// Busca uma entrega pelo identificador único.
-    /// 
-    /// Identificador único da entrega.
-    /// Retorna a entrega encontrada.
-    /// Entrega não encontrada.
+    /// </summary>
+    /// <param name="id">Identificador único da entrega.</param>
+    /// <response code="200">Retorna a entrega encontrada.</response>
+    /// <response code="404">Entrega não encontrada.</response>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -77,15 +77,15 @@ public class DeliveryController : ControllerBase
 
         return Ok(delivery);
     }
-    
-    /// 
+
+    /// <summary>
     /// Cria uma nova entrega. Limitado a 10 requisições por minuto por IP.
-    /// 
-    /// Dados da entrega.
-    /// Entrega criada com sucesso.
-    /// Dados inválidos.
-    /// Recurso não encontrado.
-    /// Limite de requisições excedido (veja o header Retry-After).
+    /// </summary>
+    /// <param name="request">Dados da entrega.</param>
+    /// <response code="201">Entrega criada com sucesso.</response>
+    /// <response code="400">Dados inválidos.</response>
+    /// <response code="404">Recurso não encontrado.</response>
+    /// <response code="429">Limite de requisições excedido (veja o header Retry-After).</response>
     [HttpPost]
     [EnableRateLimiting("escrita")]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -116,13 +116,13 @@ public class DeliveryController : ControllerBase
             delivery
         );
     }
-    
-    /// 
+
+    /// <summary>
     /// Remove uma entrega pelo identificador único.
-    /// 
-    /// Identificador único da entrega.
-    /// Entrega removida com sucesso.
-    /// Entrega não encontrada.
+    /// </summary>
+    /// <param name="id">Identificador único da entrega.</param>
+    /// <response code="204">Entrega removida com sucesso.</response>
+    /// <response code="404">Entrega não encontrada.</response>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

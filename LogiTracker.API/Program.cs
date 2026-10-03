@@ -1,66 +1,47 @@
-using System.Reflection;
+using System.Threading.RateLimiting;
+using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using LogiTracker.API.Exceptions;
 using LogiTracker.API.Extensions;
 using LogiTracker.API.Health;
+using LogiTracker.API.Swagger;
 using LogiTracker.Application.Services;
 using LogiTracker.Application.Services.Implementations;
 using LogiTracker.Infrastructure;
 using LogiTracker.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
-using Asp.Versioning;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Controllers
 builder.Services.AddControllers();
 
-// Swagger
+// Versionamento (CP5 - A)
+builder.Services
+    .AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(2, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = ApiVersionReader.Combine(
+            new QueryStringApiVersionReader("api-version"),
+            new HeaderApiVersionReader("X-Api-Version"));
+    })
+    .AddMvc()
+    .AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVVV";   // v1.0 e v2.0
+    });
+
+// Swagger: um documento por versão
 builder.Services.AddEndpointsApiExplorer();
-
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Title = "LogiTracker API - v1",
-        Version = "v1",
-        Description = "API de gerenciamento logístico (v1 - legada)"
-    });
-
-    options.SwaggerDoc("v2", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Title = "LogiTracker API - v2",
-        Version = "v2",
-        Description = "API de gerenciamento logístico (v2 - atual)"
-    });
-
-    options.DocInclusionPredicate((docName, apiDesc) =>
-    {
-        var metadata = apiDesc.ActionDescriptor.EndpointMetadata;
-
-        if (metadata.Any(m => m is ApiVersionNeutralAttribute))
-            return true;
-
-        var mapToVersions = metadata
-            .Where(m => m is MapToApiVersionAttribute)
-            .SelectMany(m => ((MapToApiVersionAttribute)m).Versions)
-            .Select(v => $"v{v.MajorVersion}")
-            .ToList();
-
-        if (mapToVersions.Count > 0)
-            return mapToVersions.Contains(docName);
-
-        var controllerVersions = metadata
-            .Where(m => m is ApiVersionAttribute)
-            .SelectMany(m => ((ApiVersionAttribute)m).Versions)
-            .Select(v => $"v{v.MajorVersion}")
-            .ToList();
-
-        return controllerVersions.Contains(docName);
-    });
-});
+builder.Services.AddSwaggerGen();
+builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
 
 // Banco
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -73,69 +54,87 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Repository genérico
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
-// Repository
+// Repositories
 builder.Services.AddScoped<ICargoRepository, CargoRepository>();
-
 builder.Services.AddScoped<ICarrierRepository, CarrierRepository>();
-
 builder.Services.AddScoped<IDeliveryRepository, DeliveryRepository>();
-
 builder.Services.AddScoped<IDriverRepository, DriverRepository>();
-
 builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
 
-// Serviço de aplicação (usa o repositório genérico para validar dependências)
+// Serviço de aplicação
 builder.Services.AddScoped<IDeliveryService, DeliveryService>();
 
 // Exception Handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-
 builder.Services.AddProblemDetails();
 
-// Health checks (CP4): self + banco (Oracle, via DbContext do CP2)
+// Health checks (CP4)
 builder.Services.AddLogiTrackerHealthChecks();
 
+// Rate limit (CP5 - C)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("escrita", opt =>
+
+    options.AddPolicy("escrita", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    options.OnRejected = async (context, ct) =>
     {
-        opt.PermitLimit = 10;                  // Máximo de 10 requisições
-        opt.Window = TimeSpan.FromMinutes(1);  // Janela de 1 minuto
-        opt.QueueLimit = 0;
-    });
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var ts)
+            ? (int)Math.Ceiling(ts.TotalSeconds)
+            : 60;
+
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Status = 429,
+            Title = "Too Many Requests",
+            Detail = $"Limite de 10 requisições por minuto excedido. Tente novamente em {retryAfter}s.",
+            Instance = context.HttpContext.Request.Path
+        }, ct);
+    };
 });
 
 var app = builder.Build();
 
-// Tratamento global
+// Tratamento global (uma única vez)
 app.UseExceptionHandler();
 
-// Swagger
+// Swagger (Development)
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
 
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "LogiTracker.API v1");
-        options.SwaggerEndpoint("/swagger/v2/swagger.json", "LogiTracker.API v2");
+        var provider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
+        foreach (var d in provider.ApiVersionDescriptions.Reverse())
+        {
+            var nome = $"LogiTracker {d.GroupName}" + (d.IsDeprecated ? " (deprecada)" : "");
+            options.SwaggerEndpoint($"/swagger/{d.GroupName}/swagger.json", nome);
+        }
     });
 }
 
-app.UseHttpsRedirection();
-
+//app.UseHttpsRedirection();
 app.UseAuthorization();
-
-app.UseRateLimiter(); 
+app.UseRateLimiter();
 app.MapControllers();
 
-app.MapControllers();
-
-// GET /health — único endpoint de health check, não listado no Swagger.
+// /health fora do teto de taxa
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
     ResponseWriter = HealthCheckResponseWriter.WriteJsonResponse
-});
+}).DisableRateLimiting();
 
 app.Run();
