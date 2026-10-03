@@ -39,14 +39,14 @@ public class GlobalExceptionHandler : IExceptionHandler
             InvalidOperationException => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
+        
+        var showMessage = statusCode < 500 || _environment.IsDevelopment();
 
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
             Title = GetTitle(statusCode),
-            Detail = _environment.IsDevelopment()
-                ? exception.Message
-                : "Erro interno na aplicação.",
+            Detail = showMessage ? exception.Message : "Erro interno na aplicação.",
             Instance = httpContext.Request.Path
         };
 
@@ -59,8 +59,9 @@ public class GlobalExceptionHandler : IExceptionHandler
 
         await httpContext.Response.WriteAsJsonAsync(
             problemDetails,
-            cancellationToken
-        );
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken: cancellationToken);
 
         return true;
     }
