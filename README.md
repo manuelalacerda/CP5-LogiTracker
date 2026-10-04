@@ -19,7 +19,7 @@ Projeto desenvolvido para o Checkpoint 5 (CP5) da FIAP, evoluindo a API REST des
 
 ### ⚠️ Pré-requisitos
 
-* .NET 8 SDK ou superior
+* .NET 9 SDK ou superior
 * Oracle Database ou ambiente Oracle acessível
 * Entity Framework Core CLI (dotnet-ef)
 
@@ -46,29 +46,50 @@ dotnet run --project LogiTracker.API
 
 ---
 
-## 🔗 URLs:
-Swagger:
+## 🔗 URLs
 
-O Swagger permite visualizar e testar os endpoints da API.
-
-```text
-http://localhost:5138/swagger/index.html
-```
-
-Health check:
-
-```text
-http://localhost:5138/health
-```
-
+| Recurso | URL |
+|---|---|
+| Swagger (Development) | `http://localhost:5138/swagger/index.html` |
+| Health check | `http://localhost:5138/health` |
+| Listagem **v1** (deprecada) | `http://localhost:5138/api/Delivery?api-version=1.0` |
+| Listagem **v2** (atual) | `http://localhost:5138/api/Delivery` |
+| Listagem v2 com paginação explícita | `http://localhost:5138/api/Delivery?page=1&pageSize=20` |
+ 
 ---
 
-## 🔀 Versionamento da API (CP5 - Seção A)
+## 🔀 Versionamento da API (CP5 — Seção A)
 
-A API suporta duas versões ativas do recurso Delivery sem interromper os consumidores legados:   
+O recurso escolhido é **Delivery** (entregas). Os dois contratos usam o **mesmo serviço de aplicação** (`IDeliveryService`); só o formato da resposta da listagem muda.
 
-* v1.0 (Deprecada): Mantém o contrato antigo do CP3, devolvendo uma lista completa (IReadOnlyList) sem paginação.
-* *v2.0 (Atual - Padrão): Introduz a paginação com envelope estruturado e filtros no banco de dados.   
+| Versão | Status | `GET /api/Delivery` devolve |
+|---|---|---|
+| **1.0** | **Deprecada** | Lista (array) completa, contrato antigo do CP3, **sem paginação** |
+| **2.0** | Atual (padrão) | **Envelope paginado** com totais |
+
+### Como informar a versão
+
+```http
+GET /api/Delivery?api-version=1.0
+```
+```http
+GET /api/Delivery
+X-Api-Version: 1.0
+```
+```http
+GET /api/Delivery
+```
+* Query string `api-version` ou header `X-Api-Version` escolhem a versão.
+* **Sem versão informada → cai na 2.0** (`DefaultApiVersion = 2.0`, `AssumeDefaultVersionWhenUnspecified = true`).
+* Toda resposta traz os headers `api-supported-versions: 1.0, 2.0` e `api-deprecated-versions: 1.0` (`ReportApiVersions = true`).
+### Demais endpoints
+
+* `GET /api/Delivery/{id}`, `POST /api/Delivery` e `DELETE /api/Delivery/{id}` valem para **as duas versões** (1.0 e 2.0). O fluxo de escrita do CP3 continua funcionando **sem informar versão** (cai na 2.0) ou com `api-version=1.0`.
+* Os controllers dos outros recursos (Cargo, Carrier, Driver, Vehicle) estão marcados com `[ApiVersionNeutral]`: continuam no ar, sem mudança, e aparecem nos dois documentos do Swagger.
+### Swagger por versão
+
+Em Development, o Swagger tem um documento por versão (`/swagger/v1.0/swagger.json` e `/swagger/v2.0/swagger.json`), selecionáveis em **Select a definition**. A descrição do documento da v1 informa que a versão está **deprecada**.
+ 
 ---
 
 ## 📑 Paginação na v2.0 (CP5 - Seção B)
