@@ -58,7 +58,7 @@ dotnet run --project LogiTracker.API
  
 ---
 
-## 🔀 Versionamento da API (CP5 — Seção A)
+## 🔀 Versionamento da API (CP5 - Seção A)
 
 O recurso escolhido é **Delivery** (entregas). Os dois contratos usam o **mesmo serviço de aplicação** (`IDeliveryService`); só o formato da resposta da listagem muda.
 
@@ -94,23 +94,36 @@ Em Development, o Swagger tem um documento por versão (`/swagger/v1.0/swagger.j
 
 ## 📑 Paginação na v2.0 (CP5 - Seção B)
 
-A listagem v2 (GET /api/Delivery/paged) executa o corte diretamente no banco de dados Oracle via Skip() e Take() com ordenação fixa (OrderBy).   
+A listagem v2 (GET /api/Delivery) executa o corte diretamente no banco de dados Oracle via Skip() e Take() com ordenação fixa (OrderBy).   
 
 |  Parâmetro  | Padrão | Regra / Limites |
 |---|---|---|
 | `page` | 1 | Inteiro >= 1 |
 | `pageSize` | 20 | Inteiro de 1 a 100 |
 
+* `page < 1` ou `pageSize` fora de 1-100 → **400** (Problem Details, com a mensagem da regra que falhou).
+* Página além do total → **200** com `items: []` (não é erro).
+
 Formato do Envelope de Resposta (200 OK):
-```JSON
+```json
 {
   "page": 1,
   "pageSize": 20,
   "totalItems": 137,
   "totalPages": 7,
-  "items": []
+  "items": [],
+  "hasPrevious": false,
+  "hasNext": true
 }
 ```
+
+Exemplos de **400**:
+
+```http
+GET /api/Delivery?page=0
+GET /api/Delivery?pageSize=9999
+```
+
 ---
 
 ## 🛑 Rate Limit (CP5 - Seção C)
@@ -124,11 +137,32 @@ Para proteger a escrita na API, foi configurada uma política nativa de Fixed Wi
   * Retorna o corpo formatado em JSON.
 * Isolamento do Health Check: O endpoint GET /health está isento da limitação (DisableRateLimiting), mantendo-se sempre operacional em 200 OK.   
 
+Exemplo de resposta no estouro:
 
+```json
+{
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Limite de 10 requisições por minuto excedido. Tente novamente em 42s.",
+  "instance": "/api/Delivery"
+}
+```
+
+### Como criar uma entrega (corpo do POST)
+
+```json
+{
+  "vehicleId": "<id de um veículo>",
+  "driverId": "<id de um motorista>",
+  "cargoId": "<id de uma carga>"
+}
+```
+
+> Cada carga só pode ter **uma** entrega (índice único em `CargoId`). Crie uma carga nova (`POST /api/Cargo`) para cada entrega.
 
 ---
 
-# ❤️ Health Check
+## ❤️ Health Check
 
 O projeto possui um único endpoint de Health Check:
 
@@ -148,17 +182,23 @@ O endpoint retorna o relatório completo dos checks:
 ```json
 {
   "status": "Healthy",
-  "totalDuration": "00:00:00.1234567",
-  "entries": {
-    "self": {
+  "totalDurationMs": 2848.8161,
+  "checks": [
+    {
+      "name": "self",
       "status": "Healthy",
-      "duration": "00:00:00.0010000"
+      "description": "O processo da API est\u00E1 no ar.",
+      "durationMs": 2.1387,
+      "error": null
     },
-    "oracle-db": {
+    {
+      "name": "oracle-db",
       "status": "Healthy",
-      "duration": "00:00:00.1200000"
+      "description": null,
+      "durationMs": 2461.9508,
+      "error": null
     }
-  }
+  ]
 }
 ```
 
@@ -172,7 +212,7 @@ O endpoint retorna o relatório completo dos checks:
 
 ---
 
-# 📊 Logs e Observabilidade
+## 📊 Logs e Observabilidade
 
 * Utilização do ILogger com registos estruturados.
 * Inclusão do identificador único da requisição (HttpContext.TraceIdentifier registrado como traceId).
@@ -181,29 +221,28 @@ O endpoint retorna o relatório completo dos checks:
 
 ---
 
-# 🧪 Testes Unitários
-Para executar:
+## 🧪 Testes Unitários
+Para executar (na raiz da solution):
 
 ```bash
 dotnet test
 ```
 
-A solução possui dois projetos de testes:
+A solution possui dois projetos de testes:
 
-```text
-LogiTracker.Domain.Tests: Testes de regras de negócio puras (sem mocks)
-LogiTracker.Application.Tests: Testes das regras de serviço e paginação com Moq para isolar os repositórios.
-```
+* `LogiTracker.Domain.Tests` - testes de regras de negócio puras (sem mocks)
+* `LogiTracker.Application.Tests` - testes das regras de serviço e paginação com Moq para isolar os repositórios
 
-## 1. Domain.Tests
 
-`LogiTracker.Domain.Tests` — referencia só o Domain, sem mocks.
+### 1. Domain.Tests
+
+`LogiTracker.Domain.Tests` - referencia só o Domain, sem mocks.
 
 * Para cenários de sucesso são utilizados `[Fact]` + `[Theory]`/`[InlineData]`
 * Para cenários de erro os testes seguem o padrão **Arrange, Act, Assert (AAA)**.
 
 
-## 2. Application.Tests
+### 2. Application.Tests
 
 `LogiTracker.Application.Tests` - testa `DeliveryService` utilizando Moq, as interfaces dos repositórios são substituídas por mocks.
 
@@ -212,9 +251,10 @@ LogiTracker.Application.Tests: Testes das regras de serviço e paginação com M
 * Para cenários de sucesso, a operação esperada é verificada com `Times.Once`
 
 As evidências (`/health` Healthy/Unhealthy, logs com `traceId`, saída do `dotnet test`) estão em `/docs`.
+
 ---
 
-# 🛡️ Tratamento de Exceções
+## 🛡️ Tratamento de Exceções
 
 O projeto mantém o `GlobalExceptionHandler` desenvolvido nos CPs anteriores.
 
@@ -231,21 +271,22 @@ As exceções são convertidas para respostas HTTP utilizando `ProblemDetails`.
 
 ---
 
-# 📁 Evidências do Checkpoint 5 (/docs/)
+## 📁 Evidências do Checkpoint 5 (`/docs/Evidences - CP5`)
 
-Na pasta /docs/ do repositório encontram-se as evidências de validação do CP5:   
-* v1-list.json / screenshot: Resposta da v1 com array simples sem paginação.
-* v2-paged.json / screenshot: Resposta da v2 paginada com envelope completo.
-* version-headers.png: Evidência dos cabeçalhos api-supported-versions e api-deprecated-versions.
-* swagger-versions Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
-  * swagger-versions1.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
-  * swagger-versions2.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
-  * swagger-versions3.png: Tela do Swagger dividida entre os documentos v1 (deprecada) e v2.
-* page-invalid-400.png: Resposta 400 Bad Request ao testar page=0 ou pageSize=9999.
-* rate-limit-429.png: Resposta 429 Too Many Requests com o cabeçalho Retry-After.
-* health-200-after-429.png: Acesso com sucesso (200 OK) ao /health após o bloqueio de escrita do Rate Limit.
-* dotnet-test.png: Saída dos testes automatizados com sucesso.
-* page-invalid-400.png: Validação da Paginação (400 Bad Request)
+| Arquivo | O que comprova                                         |
+|---|--------------------------------------------------------------|
+| `v1-list.json` / `v1-list.png` | `GET` v1 (`?api-version=1.0`): lista (array) sem paginação |
+| `v2-paged.json` / `v2-paged.png` | `GET` sem versão (cai na 2.0): envelope paginado |
+| `version-headers.png` | Headers `api-supported-versions` e `api-deprecated-versions` |
+| `swagger-versions-dropdown.png` | Swagger com os dois grupos (v1 e v2) no seletor |
+| `swagger-v1.png` | Documento v1 marcado como deprecada |
+| `swagger-v2.png` | Documento v2 com `page` e `pageSize` |
+| `v2-page1-page2.png` | Páginas 1 e 2 (`pageSize=2`) com itens distintos |
+| `page-and-pagesize-invalid-400.png` | 400 para `page=0` e`pageSize=9999` |
+| `error429-and-GET-health-200.png` | 429 com `Retry-After` e corpo JSON no `POST /api/Delivery` e `GET /health` 200 depois do estouro do rate limit |
+| `dotnet-test.png` | Saída completa do `dotnet test` (testes do CP4 e de paginação) |
+
+As evidências do CP4 (health Healthy/Unhealthy, logs com `traceId`) continuam nas subpastas de `/docs/`.
 
 ---
 
