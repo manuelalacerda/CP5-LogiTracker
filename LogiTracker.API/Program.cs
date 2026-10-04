@@ -11,7 +11,6 @@ using LogiTracker.Infrastructure;
 using LogiTracker.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -47,7 +46,12 @@ builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwa
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseOracle(
-        builder.Configuration.GetConnectionString("DefaultConnection")
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        oracleOptions =>
+        {
+            oracleOptions.UseOracleSQLCompatibility(
+                OracleSQLCompatibility.DatabaseVersion19);
+        }
     );
 });
 
